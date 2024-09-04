@@ -7,14 +7,30 @@ from .services.whatsapp_service import send_whatsapp_message
 from .services.openai_service import get_openai_response
 import time
 
+
+
+
 main = Blueprint('main', __name__)
 logger = logging.getLogger(__name__)
 
+
+@main.route('/test', methods=['GET'])
+def test_route():
+    logger.info("Test route hit")
+    return jsonify({"status": "success", "message": "Test route is working"}), 200
+
 message_timestamps = {}
+
 
 @main.route('/')
 def index():
-    return "WhatsApp Bot API is running!", 200
+    logger.info("Root route accessed")
+    return jsonify({
+        "status": "success",
+        "message": "WhatsApp Bot API is running!",
+        "environment": current_app.config['FLASK_ENV'],
+        "debug": current_app.config['DEBUG']
+    }), 200
 
 @main.route('/webhook', methods=['GET', 'POST'])
 def webhook():
