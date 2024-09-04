@@ -5,7 +5,13 @@ from . import db
 
 main = Blueprint('main', __name__)
 
-@main.route('/webhook', methods=['GET'])
+from flask import Blueprint, request, jsonify, render_template
+
+main = Blueprint('main', __name__)
+
+@main.route('/')
+def index():
+    return "Welcome to the WhatsApp Bot API"
 def verify_webhook():
     mode = request.args.get('hub.mode')
     token = request.args.get('hub.verify_token')
