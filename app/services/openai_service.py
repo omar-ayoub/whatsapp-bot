@@ -4,6 +4,7 @@ from flask import current_app
 from ..models import Conversation
 from .. import db
 import logging
+import os
 
 # Configure logging settings
 logging.basicConfig(
@@ -21,7 +22,11 @@ client = None
 def get_openai_client():
     global client
     if client is None:
-        client = OpenAI(api_key=current_app.config['OPENAI_API_KEY'])
+        api_key = os.getenv('OPENAI_API_KEY')  # Changed to use os.getenv for direct access
+        if not api_key:
+            logger.error("OPENAI_API_KEY is not set.")
+            raise ValueError("OPENAI_API_KEY is not configured in the environment.")
+        client = OpenAI(api_key=api_key)
     return client
 
 def check_if_thread_exists(wa_id):
@@ -55,7 +60,7 @@ def get_openai_response(sender, message):
 
         run = client.beta.threads.runs.create(
             thread_id=thread_id,
-            assistant_id=current_app.config['OPENAI_ASSISTANT_ID']
+            assistant_id=os.getenv('OPENAI_ASSISTANT_ID')
         )
         logger.debug(f"Run created for thread: {thread_id}")
 
