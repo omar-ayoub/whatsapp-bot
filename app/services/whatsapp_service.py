@@ -1,5 +1,5 @@
 import requests
-from flask import current_app, jsonify
+from flask import current_app
 import logging
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,9 @@ def send_whatsapp_message(recipient, message):
         'text': {'body': message}
     }
     logger.debug(f"Sending message to {recipient}: {message}")
+    logger.debug(f"URL: {url}")
+    logger.debug(f"Headers: {headers}")
+    logger.debug(f"Data: {data}")
     try:
         response = requests.post(url, json=data, headers=headers, timeout=10)
         response.raise_for_status()  # Raise an exception for HTTP errors
