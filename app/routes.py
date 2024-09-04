@@ -43,16 +43,24 @@ def webhook():
                             logger.info(f"Received message from {sender}: {text}")
                             
                             try:
+                                # Check if the table exists
+                                if not db.engine.has_table('conversation'):
+                                    logger.error("Conversation table does not exist")
+                                    db.create_all()
+                                    logger.info("Attempted to create conversation table")
+                                
                                 conversation = Conversation.query.filter_by(sender=sender).first()
                                 if not conversation:
-                                    conversation = Conversation(sender=sender)
+                                    conversation = Conversation(sender=sender, messages="")
                                     db.session.add(conversation)
                                 
-                                conversation.messages = str(conversation.messages) + f"\n{text}"  # Append new message
+                                conversation.messages += f"\n{text}"  # Append new message
                                 db.session.commit()
                                 logger.info(f"Conversation updated for {sender}")
                             except Exception as e:
                                 logger.error(f"Error updating conversation: {str(e)}")
+                                logger.error(f"Exception type: {type(e)}")
+                                logger.error(f"Exception args: {e.args}")
                                 return jsonify({"status": "error", "message": str(e)}), 500
                             
                             # Here you would process the message and send a response

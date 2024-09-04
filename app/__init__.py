@@ -19,6 +19,9 @@ def create_app(config_name='production'):
         try:
             db.create_all()
             app.logger.debug("Database tables created successfully.")
+            # Let's check if the table was actually created
+            tables = db.engine.table_names()
+            app.logger.debug(f"Tables in the database: {tables}")
         except Exception as e:
             app.logger.error(f"Error creating database tables: {str(e)}")
     
