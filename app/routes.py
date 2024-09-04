@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from .models import Conversation
 from . import db
 import logging
+from sqlalchemy import inspect
 
 main = Blueprint('main', __name__)
 logger = logging.getLogger(__name__)
@@ -44,7 +45,8 @@ def webhook():
                             
                             try:
                                 # Check if the table exists
-                                if not db.engine.has_table('conversation'):
+                                inspector = inspect(db.engine)
+                                if 'conversation' not in inspector.get_table_names():
                                     logger.error("Conversation table does not exist")
                                     db.create_all()
                                     logger.info("Attempted to create conversation table")
@@ -63,8 +65,6 @@ def webhook():
                                 logger.error(f"Exception args: {e.args}")
                                 return jsonify({"status": "error", "message": str(e)}), 500
                             
-                            # Here you would process the message and send a response
-                            # For now, let's just log it
                             logger.info(f"Processing message: {text}")
     
     return jsonify({"status": "success"}), 200
