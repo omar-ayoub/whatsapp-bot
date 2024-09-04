@@ -1,15 +1,15 @@
 import requests
-from flask import current_app
-from .openai_service import get_openai_response
+from flask import current_app, jsonify
 import logging
 
-def process_whatsapp_message(sender, message):
-    response = get_openai_response(sender, message)
-    send_whatsapp_message(sender, response)
-    return response
+logger = logging.getLogger(__name__)
+
+def log_http_response(response):
+    logger.info(f"Status: {response.status_code}")
+    logger.info(f"Content-type: {response.headers.get('content-type')}")
+    logger.info(f"Body: {response.text}")
 
 def send_whatsapp_message(recipient, message):
-    logger = logging.getLogger(__name__)
     url = f"https://graph.facebook.com/v13.0/{current_app.config['WHATSAPP_PHONE_NUMBER_ID']}/messages"
     headers = {
         'Authorization': f"Bearer {current_app.config['WHATSAPP_TOKEN']}",
@@ -23,10 +23,13 @@ def send_whatsapp_message(recipient, message):
     }
     logger.debug(f"Sending message to {recipient}: {message}")
     try:
-        response = requests.post(url, json=data, headers=headers)
+        response = requests.post(url, json=data, headers=headers, timeout=10)
         response.raise_for_status()  # Raise an exception for HTTP errors
-        logger.debug(f"Message sent successfully. WhatsApp response: {response.json()}")
+        log_http_response(response)
         return response.json()
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error sending message to WhatsApp: {str(e)}")
+    except requests.Timeout:
+        logger.error("Timeout occurred while sending message")
+        return {"status": "error", "message": "Request timed out"}
+    except requests.RequestException as e:
+        logger.error(f"Request failed due to: {e}")
         return {"status": "error", "message": str(e)}

@@ -3,6 +3,8 @@ from .models import Conversation
 from . import db
 import logging
 from sqlalchemy import inspect
+from .services.whatsapp_service import send_whatsapp_message
+from .services.openai_service import get_openai_response
 
 main = Blueprint('main', __name__)
 logger = logging.getLogger(__name__)
@@ -11,34 +13,11 @@ logger = logging.getLogger(__name__)
 def index():
     return "WhatsApp Bot API is running!"
 
-from flask import Blueprint, request, jsonify, render_template
-
-main = Blueprint('main', __name__)
-
-@main.route('/')
-def index():
-    return "Welcome to the WhatsApp Bot API"
-def verify_webhook():
-    mode = request.args.get('hub.mode')
-    token = request.args.get('hub.verify_token')
-    challenge = request.args.get('hub.challenge')
-
-    logger.debug(f"Webhook verification: mode={mode}, token={token}, challenge={challenge}")
-
-    if mode and token:
-        if mode == 'subscribe' and token == 'YOUR_VERIFY_TOKEN':
-            logger.info("Webhook verified")
-            return challenge, 200
-        else:
-            logger.warning("Webhook verification failed")
-            return 'Forbidden', 403
-    return 'Bad Request', 400
-
 @main.route('/webhook', methods=['POST'])
 def webhook():
     logger.debug(f"Received webhook: {request.json}")
     data = request.json
-    if data['object'] == 'whatsapp_business_account':
+    if is_valid_whatsapp_message(data):
         for entry in data['entry']:
             for change in entry['changes']:
                 if change['field'] == 'messages':
@@ -67,10 +46,26 @@ def webhook():
                                 logger.info(f"Conversation updated for {sender}")
                             except Exception as e:
                                 logger.error(f"Error updating conversation: {str(e)}")
-                                logger.error(f"Exception type: {type(e)}")
-                                logger.error(f"Exception args: {e.args}")
                                 return jsonify({"status": "error", "message": str(e)}), 500
                             
-                            logger.info(f"Processing message: {text}")
-    
+                            # Process the message and send the response
+                            try:
+                                response = get_openai_response(sender, text)
+                                logger.debug(f"Processed response: {response}")
+                                send_whatsapp_message(sender, response)
+                            except Exception as e:
+                                logger.error(f"Error processing message: {str(e)}")
+                                return jsonify({"status": "error", "message": str(e)}), 500
     return jsonify({"status": "success"}), 200
+
+def is_valid_whatsapp_message(body):
+    valid = (
+        body.get("object")
+        and body.get("entry")
+        and body["entry"][0].get("changes")
+        and body["entry"][0]["changes"][0].get("value")
+        and body["entry"][0]["changes"][0]["value"].get("messages")
+        and body["entry"][0]["changes"][0]["value"]["messages"][0]
+    )
+    logger.debug(f"Is valid WhatsApp message: {valid}")
+    return valid
