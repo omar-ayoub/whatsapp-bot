@@ -1,26 +1,20 @@
 from flask import Blueprint, request, jsonify, current_app
-from .models import Conversation
-from . import db
 import logging
-from sqlalchemy import inspect
+import psycopg2
+from psycopg2 import sql
 from .services.whatsapp_service import send_whatsapp_message
 from .services.openai_service import get_openai_response
 import time
-
-
-
+import os
 
 main = Blueprint('main', __name__)
 logger = logging.getLogger(__name__)
 
-
-@main.route('/test', methods=['GET'])
-def test_route():
-    logger.info("Test route hit")
-    return jsonify({"status": "success", "message": "Test route is working"}), 200
-
 message_timestamps = {}
 
+def get_db_connection():
+    conn = psycopg2.connect(os.environ['DATABASE_URL'])
+    return conn
 
 @main.route('/')
 def index():
@@ -92,24 +86,23 @@ def update_message_timestamp(sender):
     message_timestamps[sender] = time.time()
 
 def update_conversation(sender, text):
+    conn = get_db_connection()
     try:
-        inspector = inspect(db.engine)
-        if 'conversation' not in inspector.get_table_names():
-            logger.error("Conversation table does not exist")
-            db.create_all()
-            logger.info("Attempted to create conversation table")
-        
-        conversation = Conversation.query.filter_by(sender=sender).first()
-        if not conversation:
-            conversation = Conversation(sender=sender, messages="")
-            db.session.add(conversation)
-        
-        conversation.messages += f"\n{text}"  # Append new message
-        db.session.commit()
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO conversations (sender, messages)
+                VALUES (%s, %s)
+                ON CONFLICT (sender) DO UPDATE
+                SET messages = conversations.messages || E'\n' || %s
+            """, (sender, text, text))
+        conn.commit()
         logger.info(f"Conversation updated for {sender}")
-    except Exception as e:
-        logger.error(f"Error updating conversation: {str(e)}")
+    except psycopg2.Error as e:
+        conn.rollback()
+        logger.error(f"Database error updating conversation: {str(e)}")
         raise
+    finally:
+        conn.close()
 
 def is_valid_whatsapp_message(body):
     valid = (
