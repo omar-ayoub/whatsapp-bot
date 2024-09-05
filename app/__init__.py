@@ -14,6 +14,7 @@ def create_app():
     app.config['WHATSAPP_PHONE_NUMBER_ID'] = os.environ.get('WHATSAPP_PHONE_NUMBER_ID')
     app.config['OPENAI_API_KEY'] = os.environ.get('OPENAI_API_KEY')
     app.config['OPENAI_ASSISTANT_ID'] = os.environ.get('OPENAI_ASSISTANT_ID')
+    app.config['DATABASE_URL'] = os.environ.get('DATABASE_URL')
 
     from .routes import main as main_blueprint
     app.register_blueprint(main_blueprint)
