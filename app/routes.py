@@ -5,6 +5,7 @@ from psycopg2 import sql
 from .services.whatsapp_service import send_whatsapp_message
 from .services.openai_service import get_openai_response
 import time
+import os
 
 main = Blueprint('main', __name__)
 logger = logging.getLogger(__name__)
@@ -21,16 +22,9 @@ def index():
     return jsonify({
         "status": "success",
         "message": "WhatsApp Bot API is running!",
-        "environment": current_app.config['FLASK_ENV'],
-        "debug": current_app.config['DEBUG']
+        "environment": os.environ.get('FLASK_ENV', 'production'),  # Default to 'production' if not set
+        "debug": current_app.debug
     }), 200
-
-@main.route('/webhook', methods=['GET', 'POST'])
-def webhook():
-    if request.method == 'GET':
-        return verify_webhook(request)
-    elif request.method == 'POST':
-        return process_webhook(request)
 
 def verify_webhook(request):
     mode = request.args.get('hub.mode')
