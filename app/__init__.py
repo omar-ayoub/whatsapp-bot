@@ -25,9 +25,19 @@ def create_app():
     # Initialize the database
     db.init_app(app)
 
+    # Import models
+    from .models import User, Thread, Message
+
     # Create all database tables
     with app.app_context():
+        db.drop_all()
         db.create_all()
+        print("Database tables recreated successfully")
+        try:
+            db.engine.connect()
+            print("Database connection successful")
+        except Exception as e:
+            print(f"Database connection failed: {str(e)}")
 
     from .routes import main as main_blueprint
     app.register_blueprint(main_blueprint)

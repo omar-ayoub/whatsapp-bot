@@ -11,76 +11,112 @@ client = None
 def get_openai_client():
     global client
     if client is None:
-        client = OpenAI(api_key=current_app.config['OPENAI_API_KEY'])
+        client = OpenAI(
+            api_key=current_app.config['OPENAI_API_KEY'],
+            organization=current_app.config.get('OPENAI_ORGANIZATION_ID')
+        )
     return client
 
-def get_db_connection():
-    conn = psycopg2.connect(current_app.config['DATABASE_URL'])
-    return conn
-
-def get_openai_response(sender, message):
-    conn = get_db_connection()
+def create_openai_thread():
+    client = get_openai_client()
     try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT openai_thread_id FROM conversations WHERE sender = %s", (sender,))
-            result = cur.fetchone()
-            thread_id = result[0] if result else None
+        response = client.beta.threads.create(
+            headers={
+                "OpenAI-Organization": current_app.config['OPENAI_ORGANIZATION_ID'],
+                "OpenAI-Beta": "assistants=v2"
+            }
+        )
+        thread_id = response['id']
+        logger.info(f"Successfully created OpenAI thread with ID: {thread_id}")
+        return thread_id
+    except Exception as e:
+        logger.error(f"Error creating OpenAI thread: {str(e)}")
+        return None
 
-        client = get_openai_client()
-        
-        if not thread_id:
-            thread = client.beta.threads.create()
-            thread_id = thread.id
-            with conn.cursor() as cur:
-                cur.execute("INSERT INTO conversations (sender, openai_thread_id) VALUES (%s, %s) ON CONFLICT (sender) DO UPDATE SET openai_thread_id = EXCLUDED.openai_thread_id", (sender, thread_id))
-            conn.commit()
-        
-        # Check for active runs
-        active_runs = client.beta.threads.runs.list(thread_id=thread_id, status="in_progress")
-        if active_runs.data:
-            # Wait for the active run to complete (with a timeout)
-            timeout = 30  # 30 seconds timeout
-            start_time = time.time()
-            while time.time() - start_time < timeout:
-                run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=active_runs.data[0].id)
-                if run.status == "completed":
-                    break
-                time.sleep(1)
-            else:
-                return "I'm sorry, but the system is currently busy. Please try again in a moment."
-
+def process_with_openai(thread_id, message):
+    client = get_openai_client()
+    try:
+        # Send message to OpenAI with the correct headers
         client.beta.threads.messages.create(
             thread_id=thread_id,
             role="user",
-            content=message
+            content=message,
+            headers={
+                "OpenAI-Organization": current_app.config['OPENAI_ORGANIZATION_ID'],
+                "OpenAI-Beta": "assistants=v2"
+            }
         )
+        logger.info(f"Message sent to OpenAI thread {thread_id}")
 
+        # Create a run to process the message with the assistant
         run = client.beta.threads.runs.create(
             thread_id=thread_id,
-            assistant_id=current_app.config['OPENAI_ASSISTANT_ID']
+            assistant_id=current_app.config['OPENAI_ASSISTANT_ID'],
+            headers={
+                "OpenAI-Organization": current_app.config['OPENAI_ORGANIZATION_ID'],
+                "OpenAI-Beta": "assistants=v2"
+            }
         )
+        logger.info(f"Run created: {run.id}")
 
         # Wait for run to complete
         while True:
             run_status = client.beta.threads.runs.retrieve(
                 thread_id=thread_id,
-                run_id=run.id
+                run_id=run.id,
+                headers={
+                    "OpenAI-Organization": current_app.config['OPENAI_ORGANIZATION_ID'],
+                    "OpenAI-Beta": "assistants=v2"
+                }
             )
+            logger.info(f"Run status: {run_status.status}")
             if run_status.status == 'completed':
                 break
             elif run_status.status == 'failed':
+                logger.error(f"Run failed: {run_status.last_error}")
                 return "I'm sorry, but I encountered an error. Please try again later."
             time.sleep(1)
 
-        messages = client.beta.threads.messages.list(thread_id=thread_id)
-        assistant_message = next((msg for msg in messages if msg.role == 'assistant'), None)
-        
+        # Retrieve messages to find the assistant's response
+        messages = client.beta.threads.messages.list(
+            thread_id=thread_id,
+            headers={
+                "OpenAI-Organization": current_app.config['OPENAI_ORGANIZATION_ID'],
+                "OpenAI-Beta": "assistants=v2"
+            }
+        )
+        logger.info(f"Retrieved {len(messages.data)} messages from thread {thread_id}")
+
+        assistant_message = next((msg for msg in messages.data if msg.role == 'assistant'), None)
         if assistant_message and assistant_message.content:
-            return assistant_message.content[0].text.value
-        else:
-            return "I'm sorry, but I couldn't generate a response. Please try again."
+            response = assistant_message.content[0].text.value
+            logger.info(f"Assistant response: {response}")
+            return response
+
+        logger.warning("No assistant response found.")
+        return "I'm sorry, I couldn't generate a response. Please try again."
     except Exception as e:
-        logger.error(f"Error in get_openai_response: {str(e)}")
-        return "An error occurred while processing your request. Please try again later."
-    finally:
-        conn.close()
+        logger.error(f"Error in process_with_openai: {str(e)}")
+        return "An error occurred while processing your request."
+
+def get_openai_response(sender, message):
+    """
+    Main function to handle getting a response from the OpenAI assistant.
+
+    Args:
+        sender (str): The sender's identifier, used to track conversation threads.
+        message (str): The message content sent by the user.
+
+    Returns:
+        str: The assistant's response or an error message.
+    """
+    # Create or retrieve the thread ID for the sender
+    thread_id = create_openai_thread()
+    
+    if not thread_id:
+        logger.error("Unable to create or retrieve thread for user.")
+        return "I'm having trouble starting the conversation. Please try again later."
+
+    # Process the message using the OpenAI assistant
+    response = process_with_openai(thread_id, message)
+    return response
