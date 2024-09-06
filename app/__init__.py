@@ -1,8 +1,11 @@
 import os
 from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 
 load_dotenv()
+
+db = SQLAlchemy()
 
 def create_app():
     app = Flask(__name__)
@@ -14,7 +17,17 @@ def create_app():
     app.config['WHATSAPP_PHONE_NUMBER_ID'] = os.environ.get('WHATSAPP_PHONE_NUMBER_ID')
     app.config['OPENAI_API_KEY'] = os.environ.get('OPENAI_API_KEY')
     app.config['OPENAI_ASSISTANT_ID'] = os.environ.get('OPENAI_ASSISTANT_ID')
-    app.config['DATABASE_URL'] = os.environ.get('DATABASE_URL')
+    
+    # Database configuration
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+    # Initialize the database
+    db.init_app(app)
+
+    # Create all database tables
+    with app.app_context():
+        db.create_all()
 
     from .routes import main as main_blueprint
     app.register_blueprint(main_blueprint)
