@@ -5,7 +5,6 @@ from psycopg2 import sql
 from .services.whatsapp_service import send_whatsapp_message
 from .services.openai_service import get_openai_response
 import time
-import os
 
 main = Blueprint('main', __name__)
 logger = logging.getLogger(__name__)
